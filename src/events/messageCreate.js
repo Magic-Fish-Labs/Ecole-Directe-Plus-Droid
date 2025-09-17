@@ -292,10 +292,53 @@ const iaDetectionAndModeration = async (_, message) => {
     }
 };
 
+async function detectModRoleAndDeleteMessage(client, message) {
+    if (message.mentions.roles.some(role => role.id === jsonConfig.mod_role)) {
+        const modLogChannel = client.channels.cache.get(jsonConfig.mod_channel);
+        const messageLogChannel = message.channel;
+
+        if (message.reference) {
+            try {
+                await message.reference.delete();
+                modLogChannel.send(
+                    `Le message <https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.reference.messageId}> a été supprimé.`
+                );
+                messageLogChannel.send(
+                    `Le message <https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.reference.messageId}> a été supprimé. Un grand merci à <@${message.author.id}> de l'avoir signalé.`
+                );
+            } catch (error) {
+                if (error.code === 50013) {
+                    modLogChannel.send(
+                        `Impossible de supprimer le message <https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.reference.messageId}>.`
+                    );
+                    messageLogChannel.send(
+                        `Impossible de supprimer le message <https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.reference.messageId}>.`
+                    );
+                    logger.log(
+                        "[AUTOMOD] - Impossible de supprimer le message.",
+                        error
+                    );
+                }
+            }
+        } else {
+            modLogChannel.send(
+                `Le message <https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id}> est une réponse, impossible de le supprimer.`
+            );
+            messageLogChannel.send(
+                `Le message <https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id}> est une réponse, impossible de le supprimer.`
+            );
+            logger.log(
+                "[AUTOMOD] - Le message est une réponse, impossible de le supprimer."
+            );
+        }
+    }
+};
+
 module.exports = {
     name: Events.MessageCreate,
     async execute(client, message) {
         iaDetectionAndModeration(client, message);
+        detectModRoleAndDeleteMessage(client, message);
     },
 };
 
