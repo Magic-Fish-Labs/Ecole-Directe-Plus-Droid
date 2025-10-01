@@ -1,4 +1,10 @@
-const { Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const {
+    Events,
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+} = require("discord.js");
 const fs = require("fs");
 const path = require("path");
 const ctx = new (require("../global/context"))();
@@ -7,7 +13,10 @@ const logger = require("../helpers/logger");
 
 const handleBotThreats = async (member) => {
     const warnDMBottingEmbedData = JSON.parse(
-        fs.readFileSync(path.join(__dirname, "../embeds/warnDMBotting.json"), "utf8")
+        fs.readFileSync(
+            path.join(__dirname, "../embeds/warnDMBotting.json"),
+            "utf8"
+        )
     );
 
     const warnDMBottingEmbed = new EmbedBuilder()
@@ -16,57 +25,83 @@ const handleBotThreats = async (member) => {
         .setColor(warnDMBottingEmbedData.color)
         .setAuthor({
             name: warnDMBottingEmbedData.author.name,
-            url: warnDMBottingEmbedData.author.url || "https://www.ecole-directe.plus/",
+            url:
+                warnDMBottingEmbedData.author.url ||
+                "https://www.ecole-directe.plus/",
             iconURL: warnDMBottingEmbedData.author.icon_url,
         });
-    
-    const modChannel = member.guild.channels.cache.find(
-        (channel) => channel.id === jsonConfig.mod_channel
-    );
 
-    const modRole = member.guild.roles.cache.find(
-        (role) => role.id === jsonConfig.mod_role
-    );
+    const configuredModChannelId =
+        (jsonConfig && jsonConfig.mod_channel) ||
+        jsonConfig.mod_channel;
+    const configuredModRoleId =
+        (jsonConfig && jsonConfig.mod_role) || jsonConfig.mod_role;
+
+    const modChannel =
+        member.guild.channels.cache.get(configuredModChannelId) ||
+        member.guild.channels.cache.find(
+            (channel) => channel.id === configuredModChannelId
+        );
+
+    const modRole =
+        member.guild.roles.cache.get(configuredModRoleId) ||
+        member.guild.roles.cache.find(
+            (role) => role.id === configuredModRoleId
+        );
 
     const warnModBottingEmbedData = JSON.parse(
-        fs.readFileSync(path.join(__dirname, "../embeds/warnModBotting.json"), "utf8")
+        fs.readFileSync(
+            path.join(__dirname, "../embeds/warnModBotting.json"),
+            "utf8"
+        )
     );
 
     const warnModBottingEmbed = new EmbedBuilder()
         .setTitle(warnModBottingEmbedData.title)
-        .setDescription(warnModBottingEmbedData.description
-            .replace("{memberThreat}", `<@${member.user.id}>`)
+        .setDescription(
+            warnModBottingEmbedData.description.replace(
+                "{memberThreat}",
+                `<@${member.user.id}>`
+            )
         )
         .setColor(warnModBottingEmbedData.color)
         .setAuthor({
             name: warnModBottingEmbedData.author.name,
-            url: warnModBottingEmbedData.author.url || "https://www.ecole-directe.plus/",
+            url:
+                warnModBottingEmbedData.author.url ||
+                "https://www.ecole-directe.plus/",
         });
 
-    const actions = new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setCustomId('unmute')
-                .setStyle(ButtonStyle.Success)
-                .setLabel('Unmute'),
+    const actions = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId("unmute")
+            .setStyle(ButtonStyle.Success)
+            .setLabel("Unmute"),
 
-            new ButtonBuilder()
-                .setCustomId('ban')
-                .setStyle(ButtonStyle.Danger)
-                .setLabel('Ban')
-        );
+        new ButtonBuilder()
+            .setCustomId("ban")
+            .setStyle(ButtonStyle.Danger)
+            .setLabel("Ban")
+    );
 
     if (member.user.bot) {
-        const rolesToRemove = member.roles.cache.filter(role => role.name !== "@everyone");
+        logger.warn(`Bot detected: ${member.user.tag} (${member.user.id})`);
+
+        const rolesToRemove = member.roles.cache.filter(
+            (role) => role.name !== "@everyone"
+        );
         for (const role of rolesToRemove.values()) {
             await member.roles.remove(role);
         }
 
-        let mutedRole = member.guild.roles.cache.find(role => role.name === "Muted");
+        let mutedRole = member.guild.roles.cache.find(
+            (role) => role.name === "Muted"
+        );
         if (!mutedRole) {
+            logger.debug("Creating 'Muted' role as it does not exist.");
             mutedRole = await member.guild.roles.create({
                 name: "Muted",
-                color: "#808080",
+                colors: "#808080",
                 permissions: [],
                 reason: "Permanent mute for bot threat",
             });
@@ -82,13 +117,19 @@ const handleBotThreats = async (member) => {
                 }
             }
         }
-
+        
         await member.roles.add(mutedRole);
 
-        await member.send({
-            embeds: [warnDMBottingEmbed],
-            content: `|| <@${member.user.id}> ||`,
-        });
+        try {
+            await member.send({
+                embeds: [warnDMBottingEmbed],
+                content: `|| <@${member.user.id}> ||`,
+            });
+        } catch (error) {
+            logger.error(
+                `Could not send DM to bot ${member.user.tag} (${member.user.id}).`
+            );
+        }
 
         if (modChannel) {
             const sentMsg = await modChannel.send({
@@ -98,19 +139,37 @@ const handleBotThreats = async (member) => {
             });
 
             const filter = (interaction) =>
-                ['unmute', 'ban'].includes(interaction.customId) &&
+                ["unmute", "ban"].includes(interaction.customId) &&
                 interaction.member.roles.cache.has(modRole.id);
 
-            const collector = sentMsg.createMessageComponentCollector({ filter, time: 60000 });
+            const collector = sentMsg.createMessageComponentCollector({
+                filter,
+                max: 1,
+                time: null,
+            });
 
-            collector.on('collect', async (interaction) => {
-                if (interaction.customId === 'unmute') {
+            collector.on("collect", async (interaction) => {
+                if (interaction.customId === "unmute") {
                     await member.roles.remove(mutedRole);
-                    await interaction.reply({ content: `Le bot <@${member.user.id}> a été unmute.`, ephemeral: true });
-                } else if (interaction.customId === 'ban') {
-                    await member.ban({ reason: "Bot threat - action par modérateur" });
-                    await interaction.reply({ content: `Le bot <@${member.user.id}> a été banni.`, ephemeral: true });
+                    await interaction.reply({
+                        content: `Le bot <@${member.user.id}> a été unmute.`,
+                        ephemeral: true,
+                    });
+                } else if (interaction.customId === "ban") {
+                    await member.ban({
+                        reason: "Bot threat - action par modérateur",
+                    });
+                    await interaction.reply({
+                        content: `Le bot <@${member.user.id}> a été banni.`,
+                        ephemeral: true,
+                    });
                 }
+                await sentMsg.edit({ components: [] });
+                collector.stop();
+            });
+
+            collector.on("end", async () => {
+                await sentMsg.edit({ components: [] });
             });
         }
     }
