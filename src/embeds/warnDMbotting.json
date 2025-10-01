@@ -1,0 +1,9 @@
+{
+  "title": "⛔ Menace potentielle à l'intégrité du serveur ⛔",
+  "description": "Bonjour, 👋\n\nNous avons identifié une **menace potentielle** provenant de votre client, susceptible de compromettre l'intégrité et la sécurité de notre serveur. 🚨\n\nEn conséquence, votre compte a été **isolé** jusqu'à l'intervention d'un modérateur.\nNous vous invitons à **vérifier et corriger** cette situation dans les plus brefs délais afin d'éviter tout impact négatif sur l'environnement du serveur. ⚠️\n\n*Si vous pensez qu'il s'agit d'une **erreur**, veuillez le signaler auprès d'un modérateur. Ils examineront votre situation avec attention. 🛡️*\n\nMerci de votre compréhension et de votre coopération. 🙏",
+  "color": "#b00000",
+  "author": {
+    "name": "Ecole Directe Plus Security",
+    "icon_url": "https://pbs.twimg.com/profile_images/1680302515097673729/x1cHA0q5_400x400.png"
+  }
+}

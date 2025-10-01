@@ -1,0 +1,9 @@
+{
+  "description": "Bonjour à tous les modérateurs,\n\nNous avons identifié un **utilisateur dont le client a été marqué comme une menace potentielle** pour l'intégrité et la sécurité de notre serveur. 🚨\n\n{memberThreat} a été **mute** jusqu'à ce qu'une **intervention** soit effectuée. Nous vous prions de bien vouloir **examiner cette situation dès que possible** afin de déterminer les mesures appropriées à prendre.\n\nMerci de votre vigilance et de votre réactivité. 🛡️",
+  "author": {
+    "name": "Ecole Directe Plus Security",
+    "icon_url": "https://pbs.twimg.com/profile_images/1680302515097673729/x1cHA0q5_400x400.png"
+  },
+  "color": "#b00000",
+  "title": "⚠️ Alerte de Sécurité - Intervention Nécessaire ⚠️"
+}
