@@ -7,8 +7,13 @@ const customTimestampFormat = format((info, opts) => {
     return info;
 });
 
+// Allow overriding the log level via environment variable, default to 'debug' when not in production
+const defaultLevel =
+    process.env.LOG_LEVEL ||
+    (process.env.NODE_ENV === "production" ? "info" : "debug");
+
 const logger = createLogger({
-    level: "info",
+    level: defaultLevel,
     format: format.combine(customTimestampFormat(), format.json()),
     transports: [
         new transports.Console(),
@@ -17,4 +22,3 @@ const logger = createLogger({
 });
 
 module.exports = logger;
-
