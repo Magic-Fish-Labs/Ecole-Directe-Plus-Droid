@@ -12,6 +12,7 @@
     "author": "As De Pique :) / in collaboration with Ewalwi (:",
     "license": "ISC",
     "dependencies": {
+        "@discordjs/builders": "^1.14.1",
         "axios": "^1.7.9",
         "discord.js": "^14.16.3",
         "dotenv": "^16.4.5",
@@ -21,7 +22,8 @@
         "nodemon": "^3.1.9",
         "prettier": "^3.4.2",
         "winston": "^3.17.0",
-        "winston-daily-rotate-file": "^5.0.0"
+        "winston-daily-rotate-file": "^5.0.0",
+        "ws": "^8.20.0"
     },
     "devDependencies": {
         "eslint": "^9.17.0",

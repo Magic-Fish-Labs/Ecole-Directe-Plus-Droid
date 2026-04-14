@@ -6,16 +6,38 @@
     "admin_role": "[ID_ADMIN_ROLE]",
     "mod_role": "[ID_MOD_ROLE]",
     "op_role": "[ID_OP_ROLE]",
-    "bot_devs": ["744177952346079253", "899703183520182322", "1326235827541381180"],
-    "prompt": "En tant que modérateur, vous devez analyser chaque message reçu et répondre uniquement par 'block' ou 'pass'.Répondez 'block' si le message contient :De la publicitéDu contenu NSFW (non sécurisé pour le travail)De la violenceDes insultes ciblées (ex. : attaques personnelles)Répondez 'pass' pour tous les autres messages, y compris ceux contenant des vulgarités non ciblées comme 'merde' ou 'putain'.Assurez-vous de ne pas fournir d'explications ou de commentaires supplémentaires. Votre réponse doit être claire et concise.",
-     
+    "automod": {
+        "mode": "notify",
+        "forced_response": true,
+        "punishment_ai": false
+    },
+    "bot_devs": [
+        "744177952346079253",
+        "899703183520182322",
+        "1326235827541381180"
+    ],
+    "prompt": "Tu es un système de modération ULTRA-STRICT. On te transmet un message SIGNALÉ par un humain. CONSIDÈRE QUE LE MESSAGE EST COUPABLE À 90%. Ne laisse RIEN passer : Insultes même légères, pubs, liens Discord, toxicité, manque de respect, spam, ou contenu hors-sujet. Réponds UNIQUEMENT par 'block' (si tu as le moindre doute, choisis block) ou 'pass' (uniquement si le message est 100% pur et amical). AUCUNE EXPLICATION.",
+    "punishment_prompt": "En tant qu'IA de modération, choisis la punition la plus adaptée pour ce message parmi : DELETE (suppression simple), WARN (avertissement), MUTE (exclusion temporaire). Réponds UNIQUEMENT par le mot-clé.",
     "real": {
-        "mod_channel": "1170356329722949652",
+        "mod_channel": "1323584755371081780",
         "general_channel": "1170357852846686228",
         "admin_role": "1170353256166342777",
-        "mod_role": "1170362568297164820",
+        "mod_role": "1324668177300586557",
         "op_role": "1323355831378640970",
-        "bot_devs": ["744177952346079253", "899703183520182322", "1326235827541381180"],
+        "automod": {
+            "mode": "delete",
+            "forced_response": true,
+            "punishment_ai": false
+        },
+        "link_whitelist": [
+            "discord.gg/ecole-directe-plus"
+        ],
+        "security_msg": "🛡️ **EDP Security Team** : Les invitations Discord externes sont interdites sur ce serveur pour garantir la sécurité de nos membres. Seules les invitations officielles sont autorisées.",
+        "bot_devs": [
+            "744177952346079253",
+            "899703183520182322",
+            "1326235827541381180"
+        ],
         "ticketCategoryId": "1315779992915017738"
     }
 }
