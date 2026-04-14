@@ -1,6 +1,12 @@
 {
-    "title": "🚨 Signalement de Comportement Inapproprié 🚨",
-    "description": "Un comportement inapproprié a été détecté de la part de **{message.author}**.\nLe message a d'ores et déjà été signalé.\n\n**Auteur** : {message.author.name}\n**Contenu** : ||{message.content}||\n**Lien du message: https://discord.com/channels/{serverId}/{channelId}/{messageId}**",
-    "color": "#b00000"
+    "title": "🛡️ AutoMod - Signalement Prioritaire 🚨",
+    "description": "Un message a été signalé par **{reporter.tag}** via une mention des modérateurs.\nL'IA a analysé le contenu et confirme qu'une action est probablement nécessaire (85% de certitude).",
+    "color": "#e74c3c",
+    "fields": [
+        { "name": "👤 Auteur", "value": "{target.tag} (`{target.id}`)", "inline": true },
+        { "name": "💬 Salon", "value": "{target.channel}", "inline": true },
+        { "name": "📝 Contenu", "value": "```\n{target.content}\n```" },
+        { "name": "🔗 Lien", "value": "[Aller au message]({target.url})" }
+    ],
+    "footer": { "text": "EcoleDirecte Plus Droid - Système de Modération IA" }
 }
-

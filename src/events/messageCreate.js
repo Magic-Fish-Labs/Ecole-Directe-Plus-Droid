@@ -7,288 +7,172 @@ const {
     MessageFlags,
 } = require("discord.js");
 const fs = require("fs");
-
-const Groq = require("groq-sdk");
+const axios = require("axios");
 const path = require("path");
 const ctx = new (require("../global/context"))();
 
-const jsonConfig = require("../../config.json");
+const jsonConfigPath = path.join(__dirname, "../../config.json");
 const logger = require("../helpers/logger");
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const sendSecurityDM = async (user, guildName, channelName, content) => {
+    try {
+        const securityEmbed = new EmbedBuilder()
+            .setAuthor({ name: "Ecole Directe Plus Security", iconURL: "https://www.ecole-directe.plus/favicon.ico" })
+            .setTitle("⛔ Comportement Inapproprié ⛔")
+            .setDescription(
+                `Nous avons détecté un abus de vocabulaire violent ou inapproprié dans un de tes précédents messages sur **${guildName}** (salon #${channelName}).\n\n` +
+                "Ce type de langage est inacceptable et va à l'encontre de nos règles de conduite.\n\n" +
+                "• 🛑 **Rappel** : Le respect et la courtoisie sont essentiels dans nos échanges.\n\n" +
+                "Si ce comportement persiste, des mesures disciplinaires pourraient être prises, y compris la suspension de ton accès à la plateforme. 🔒\n\n" +
+                "Nous te conseillons vivement de réfléchir à tes mots et de faire preuve de respect envers les autres utilisateurs. 🤝\n\n" +
+                "Merci de ta compréhension ! 🙏"
+            )
+            .addFields({ name: "📝 Message concerné", value: `\`\`\`${content.substring(0, 100)}\`\`\`` })
+            .setColor("#ff0000")
+            .setTimestamp();
+
+        await user.send({ embeds: [securityEmbed] });
+        return true;
+    } catch (e) {
+        logger.warn(`[SECURITY] - Impossible d'envoyer le DM à ${user.tag}`);
+        return false;
+    }
+};
+
+const linkFiltering = async (message, config) => {
+    if (message.author.bot) return false;
+    const inviteRegex = /discord(?:app\.com\/invite|\.gg)\/([\w-]{2,255})/gi;
+    const match = inviteRegex.exec(message.content);
+    if (match) {
+        const fullLink = match[0].toLowerCase();
+        const whitelist = config.link_whitelist || [];
+        const isWhitelisted = whitelist.some(w => fullLink.includes(w.toLowerCase()));
+        if (!isWhitelisted) {
+            try {
+                await message.delete();
+                const securityEmbed = new EmbedBuilder()
+                    .setAuthor({ name: "EDP Security Team", iconURL: message.guild.iconURL() })
+                    .setTitle("🛡️ Protection Anti-Pub")
+                    .setDescription(`Désolé ${message.author}, les invitations Discord externes sont interdites ici.`)
+                    .setColor("#e74c3c")
+                    .setTimestamp();
+                const warnMsg = await message.channel.send({ embeds: [securityEmbed] });
+                setTimeout(() => warnMsg.delete().catch(() => {}), 10000);
+                return true;
+            } catch (err) { logger.error("[LINK_FILTER] - Erreur suppression :", err); }
+        }
+    }
+    return false;
+};
 
 const iaDetectionAndModeration = async (_, message) => {
-    if (
-        message.author.bot ||
-        (message.content.toLowerCase().endsWith(".safemsg") &&
-            jsonConfig.bot_devs.includes(message.author.id))
-    ) {
-        const opEmbedData = JSON.parse(
-            fs.readFileSync(
-                path.join(__dirname, "../embeds/opBypass.json"),
-                "utf8"
-            )
-        );
+    if (message.author.bot) return;
 
-        const opEmbed = new EmbedBuilder()
-            .setTitle(opEmbedData.title)
-            .setDescription(opEmbedData.description)
-            .setColor(opEmbedData.color)
-            .setAuthor({
-                name: opEmbedData.author.name,
-                url:
-                    opEmbedData.author.url || "https://www.ecole-directe.plus/",
-                iconURL: opEmbedData.author.iconUrl,
-            });
+    const freshConfig = JSON.parse(fs.readFileSync(jsonConfigPath, "utf8"));
+    const config = freshConfig.real && freshConfig.real.mod_role !== "[ID_MOD_ROLE]" ? freshConfig.real : freshConfig;
+    
+    if (await linkFiltering(message, config)) return;
 
+    const modRoleID = config.mod_role;
+    const automodConfig = config.automod || { mode: "notify" };
+
+    // DÉTECTION BLINDÉE : On vérifie la collection de mentions OU la présence de l'ID dans le texte
+    const hasRoleMention = message.mentions.roles.has(modRoleID) || message.content.includes(modRoleID);
+    const isReportByReply = message.reference && hasRoleMention;
+    
+    if (!isReportByReply) return;
+
+    // Log pour confirmer le déclenchement
+    logger.info(`[AUTOMOD] - Déclenchement détecté via: "${message.content}"`);
+
+    let targetMessage;
+    try {
+        targetMessage = await message.channel.messages.fetch(message.reference.messageId);
+    } catch (err) { return; }
+
+    if (!targetMessage || targetMessage.author.bot) return;
+
+    const analyze = async (msgContent, systemPrompt) => {
         try {
-            if (message.author.bot) return;
-            const replyMsg = await message.reply({
-                embeds: [opEmbed],
-                flags: MessageFlags.Ephemeral,
+            const response = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
+                model: process.env.OPENROUTER_MODEL || "google/gemini-2.0-flash-lite-preview-02-05:free",
+                messages: [{ role: "system", content: systemPrompt }, { role: "user", content: msgContent }]
+            }, {
+                headers: { "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`, "Content-Type": "application/json" },
+                timeout: 10000
             });
+            return response.data.choices[0]?.message?.content?.toLowerCase().trim();
+        } catch (error) { return "pass"; }
+    };
 
-            setTimeout(() => {
-                replyMsg
-                    .delete()
-                    .catch((err) =>
-                        logger.error(
-                            "[AUTOMOD] - Erreur lors de la suppression du message :",
-                            err
+    const aiDetection = await analyze(targetMessage.content, freshConfig.prompt);
+
+    if (aiDetection && aiDetection.includes("block")) {
+        const mode = automodConfig.mode;
+        const modChannel = await message.guild.channels.fetch(config.mod_channel).catch(() => null);
+
+        if (mode === "delete" || mode === "ai") {
+            let punishment = "delete";
+            if (mode === "ai") punishment = await analyze(targetMessage.content, freshConfig.punishment_prompt);
+
+            try {
+                await sendSecurityDM(targetMessage.author, message.guild.name, targetMessage.channel.name, targetMessage.content);
+                if (punishment.includes("mute")) await targetMessage.member.timeout(600000, "AutoMod AI Decision");
+                await targetMessage.delete();
+                await message.delete();
+
+                if (modChannel) {
+                    const logEmbed = new EmbedBuilder()
+                        .setTitle(`🛡️ AutoMod - Action: ${mode.toUpperCase()}`)
+                        .setDescription(`Utilisateur **${targetMessage.author.tag}** sanctionné automatiquement.`)
+                        .addFields(
+                            { name: "⚡ Sanction", value: punishment.toUpperCase(), inline: true },
+                            { name: "📝 Message", value: `\`\`\`${targetMessage.content}\`\`\`` }
                         )
-                    );
-            }, 5000);
-        } catch (error) {
-            if (error.code === 50007) {
-                console.log(
-                    "[AUTOMOD] - Impossible d'envoyer un message privé à l'utilisateur."
-                );
-            }
-        }
-        return;
-    }
-
-    const modRole = message.guild.roles.cache.find(
-        (role) => role.id === jsonConfig.mod_role
-    );
-    const modChannel = message.guild.channels.cache.find(
-        (channel) => channel.id === jsonConfig.mod_channel
-    );
-    const generalChannel = message.guild.channels.cache.find(
-        (channel) => channel.id === jsonConfig.general_channel
-    );
-    const content = message.content.toLowerCase();
-
-    let aiDetection = "pass";
-    async function getGroqChatCompletion() {
-        try {
-            return groq.chat.completions.create({
-                messages: [
-                    {
-                        role: "system",
-                        content: jsonConfig.prompt,
-                    },
-                    {
-                        role: "user",
-                        content: content,
-                    },
-                ],
-                model: "llama3-70b-versatile",
-                temperature: 0,
-                /* eslint-disable camelcase */
-                max_tokens: 1024,
-                top_p: 0,
-                /* eslint-enable camelcase */
-            });
-        } catch (error) {
-            logger.error(
-                "No tokens left for current model",
-                error // Je mets ça comme ça mais je ne pense pas que le modèle puisse se vider de ses tokens si facilement -- ewalwi
-            );
-        }
-    }
-
-    const chatCompletion = await getGroqChatCompletion();
-    aiDetection = chatCompletion.choices[0]?.message?.content;
-
-    if (aiDetection === "block") {
-        const member = message.member;
-        ctx.set("MESSAGE_CREATE_GENERAL_CHANNEL", generalChannel); // I can't be bothered to export message in the buttons so... :) -> in french "flm"
-        ctx.set("MESSAGE_CREATE_MEMBER", member);
-        const modWarnEmbedContent = JSON.parse(
-            fs.readFileSync(
-                path.join(__dirname, "../embeds/warnMod.json"),
-                "utf8"
-            )
-        );
-        let description = modWarnEmbedContent.description
-            .replace("{message.author}", member.user.globalName)
-            .replace("{message.author.name}", member.user.username)
-            .replace("{message.content}", message.content)
-            .replace("{serverId}", message.guildId)
-            .replace("{channelId}", message.channelId)
-            .replace("{messageId}", message.id);
-
-        const modWarnEmbed = new EmbedBuilder()
-            .setTitle(modWarnEmbedContent.title)
-            .setDescription(description)
-            .setColor(modWarnEmbedContent.color);
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId("warnCommunity")
-                .setLabel("Prévenir la communauté")
-                .setStyle(ButtonStyle.Danger),
-            new ButtonBuilder()
-                .setCustomId("reportUser")
-                .setLabel("Signaler l'utilisateur")
-                .setStyle(ButtonStyle.Danger),
-            new ButtonBuilder()
-                .setCustomId("deleteMessage")
-                .setLabel("Supprimer le message")
-                .setStyle(ButtonStyle.Danger)
-        );
-        const modMessage = await modChannel.send({
-            embeds: [modWarnEmbed],
-            components: [row],
-            content: `${modRole}`,
-        });
-
-        modMessage["badMessageUserId"] = message.author.id;
-        modMessage["badMessageLinkID"] =
-            `https://discord.com/channels/${message.guildId}/${message.channelId}/${message.id}`;
-
-        const filter = (i) =>
-            i.customId === "warnCommunity" ||
-            i.customId === "reportUser" ||
-            i.customId === "deleteMessage";
-
-        const collector = modMessage.createMessageComponentCollector({
-            filter,
-            time: 3600000,
-        });
-
-        collector.on("collect", async (collectorInteraction) => {
-            await collectorInteraction.deferUpdate();
-
-            const userMention = `<@${collectorInteraction.user.id}>`;
-            let actionMessage;
-
-            if (collectorInteraction.customId === "warnCommunity") {
-                const previousContent =
-                    modMessage.content === `<@&${jsonConfig.mod_role}>`
-                        ? ""
-                        : modMessage.content;
-                actionMessage = `|| ${userMention} a prévenu la communauté". ||`;
-
-                await collectorInteraction.followUp({
-                    content: "La communauté a été prévenue.",
-                    flags: MessageFlags.Ephemeral,
-                });
-
-                const newComponents = modMessage.components
-                    .map((row) => {
-                        const filteredComponents = row.components.filter(
-                            (component) =>
-                                component.customId !== "warnCommunity"
-                        );
-
-                        return filteredComponents.length > 0
-                            ? new ActionRowBuilder().addComponents(
-                                  filteredComponents
-                              )
-                            : null;
-                    })
-                    .filter(Boolean);
-                const updatedContent =
-                    `${previousContent}\n${actionMessage}`.trim();
-                await modMessage.edit({
-                    components: newComponents,
-                    content: updatedContent,
-                });
-            } else if (collectorInteraction.customId === "reportUser") {
-                const previousContent =
-                    modMessage.content === `<@&${jsonConfig.mod_role}>`
-                        ? ""
-                        : modMessage.content;
-
-                actionMessage = `|| ${userMention} a signalé l'utilisateur". ||`;
-
-                try {
-                    await collectorInteraction.followUp({
-                        content: "L'utilisateur a été signalé.",
-                        flags: MessageFlags.Ephemeral,
-                    });
-
-                    const newComponents = modMessage.components
-                        .map((row) => {
-                            const filteredComponents = row.components.filter(
-                                (component) =>
-                                    component.customId !== "reportUser"
-                            );
-
-                            return filteredComponents.length > 0
-                                ? new ActionRowBuilder().addComponents(
-                                      filteredComponents
-                                  )
-                                : null;
-                        })
-                        .filter(Boolean);
-                    const updatedContent =
-                        `${previousContent}\n${actionMessage}`.trim();
-                    await modMessage.edit({
-                        components: newComponents,
-                        content: updatedContent,
-                    });
-                } catch (error) {
-                    if (error.code === 50007) {
-                        logger.log(
-                            "[AUTOMOD] - Impossible d'envoyer un message privé à l'utilisateur.",
-                            error
-                        );
-                    }
+                        .setColor("#ffcc00").setTimestamp();
+                    await modChannel.send({ embeds: [logEmbed] });
                 }
-            } else if (collectorInteraction.customId === "deleteMessage") {
-                await collectorInteraction.followUp({
-                    content: "Le message a été supprimé.",
-                    flags: MessageFlags.Ephemeral,
-                });
+            } catch (e) { logger.error("[AUTOMOD] - Erreur action auto :", e); }
+            return;
+        }
 
-                const previousContent =
-                    modMessage.content === `<@&${jsonConfig.mod_role}>`
-                        ? ""
-                        : modMessage.content;
-                actionMessage = `|| ${userMention} a supprimé le message". ||`;
+        if (modChannel) {
+            const modWarnEmbed = new EmbedBuilder()
+                .setTitle("🛡️ AutoMod - Signalement Prioritaire 🚨")
+                .setDescription(`Signalé par **${message.author.tag}**.\nL'IA confirme l'infraction.`)
+                .addFields(
+                    { name: "👤 Auteur", value: `${targetMessage.author.tag}`, inline: true },
+                    { name: "💬 Salon", value: `<#${targetMessage.channelId}>`, inline: true },
+                    { name: "📝 Contenu", value: `\`\`\`${targetMessage.content}\`\`\`` }
+                )
+                .setColor("#b00000").setTimestamp();
 
-                const newComponents = modMessage.components
-                    .map((row) => {
-                        const filteredComponents = row.components.filter(
-                            (component) =>
-                                component.customId !== "deleteMessage"
-                        );
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId("deleteMessage").setLabel("Supprimer").setEmoji("🗑️").setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId("warnUser").setLabel("Avertir DM").setEmoji("⚠️").setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId("ignoreReport").setLabel("Ignorer").setEmoji("✅").setStyle(ButtonStyle.Success)
+            );
 
-                        return filteredComponents.length > 0
-                            ? new ActionRowBuilder().addComponents(
-                                  filteredComponents
-                              )
-                            : null;
-                    })
-                    .filter(Boolean);
+            const modMsg = await modChannel.send({ content: `<@&${modRoleID}>`, embeds: [modWarnEmbed], components: [row] });
+            const collector = modMsg.createMessageComponentCollector({ time: 3600000 });
 
-                const updatedContent =
-                    `${previousContent}\n${actionMessage}`.trim();
-
-                await modMessage.edit({
-                    components: newComponents,
-                    content: updatedContent,
-                });
-
-                return;
-            }
-        });
-
-        logger.info("[AUTOMOD] - Opération de modération effectuée.");
-        return;
+            collector.on("collect", async (interaction) => {
+                if (interaction.customId === "deleteMessage") {
+                    try {
+                        const msg = await targetMessage.channel.messages.fetch(targetMessage.id);
+                        await msg.delete();
+                        await interaction.reply({ content: "✅ Message supprimé.", flags: MessageFlags.Ephemeral });
+                    } catch (e) { await interaction.reply({ content: "❌ Déjà supprimé.", flags: MessageFlags.Ephemeral }); }
+                    await modMsg.edit({ components: [] });
+                } else if (interaction.customId === "warnUser") {
+                    const sent = await sendSecurityDM(targetMessage.author, message.guild.name, targetMessage.channel.name, targetMessage.content);
+                    await interaction.reply({ content: sent ? "✅ DM envoyé." : "❌ Impossible d'envoyer le DM.", flags: MessageFlags.Ephemeral });
+                } else if (interaction.customId === "ignoreReport") {
+                    await interaction.reply({ content: "✅ Signalement ignoré.", flags: MessageFlags.Ephemeral });
+                    await modMsg.edit({ components: [] });
+                }
+            });
+        }
     }
 };
 
@@ -298,4 +182,3 @@ module.exports = {
         iaDetectionAndModeration(client, message);
     },
 };
-

@@ -62,13 +62,39 @@ const handleComponents = async (Client, interaction) => {
       await handleCancelCloseButtonClick(interaction);
     } else {
       const button = Client.buttons.get(interaction.customId);
-      if (!button) return interaction.reply("Ce bouton n'existe pas");
+      if (!button) return; // Silent return for local collectors
       button.runInteraction(Client, interaction);
     }
   } else if (interaction.isStringSelectMenu()) {
     const select = Client.selects.get(interaction.customId);
     if (!select) return interaction.reply("Ce menu de sélection n'existe pas");
     select.runInteraction(Client, interaction);
+  } else if (interaction.isModalSubmit()) {
+      const fs = require("fs");
+      const path = require("path");
+      const configPath = path.join(__dirname, "../../config.json");
+      const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      
+      if (interaction.customId === "modal_add_whitelist") {
+          const newLink = interaction.fields.getTextInputValue("link_input").trim().toLowerCase();
+          if (!config.real.link_whitelist.includes(newLink)) {
+              config.real.link_whitelist.push(newLink);
+              fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
+              await interaction.reply({ content: `✅ Le lien \`${newLink}\` a été ajouté à la whitelist.`, flags: MessageFlags.Ephemeral });
+          } else {
+              await interaction.reply({ content: "❌ Ce lien est déjà whiteliste.", flags: MessageFlags.Ephemeral });
+          }
+      } else if (interaction.customId === "modal_remove_whitelist") {
+          const delLink = interaction.fields.getTextInputValue("link_remove_input").trim().toLowerCase();
+          const index = config.real.link_whitelist.indexOf(delLink);
+          if (index > -1) {
+              config.real.link_whitelist.splice(index, 1);
+              fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
+              await interaction.reply({ content: `✅ Le lien \`${delLink}\` a été supprimé de la whitelist.`, flags: MessageFlags.Ephemeral });
+          } else {
+              await interaction.reply({ content: "❌ Ce lien ne figure pas dans la whitelist.", flags: MessageFlags.Ephemeral });
+          }
+      }
   }
 };
 
