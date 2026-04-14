@@ -46,13 +46,14 @@ We're almost there...
 Still in `.env`, paste these lines next to your `TOKEN`
 
 ```SOCKET_URL=wss://ecole-directe.plus/ws:7890
-GROQ_API_KEY=<YOUR GROQ API KEY>
+OPENROUTER_API_KEY=<YOUR openrouter API KEY>
+OPENROUTER_MODEL=openai/gpt-oss-20b:free
 NODE_ENV=developpment
 MAIN_SERVER_ID=<YOUR SERVER ID>
 ```
 
 
-Complete your Groq API key in the `GROQ_API_KEY`.
+Complete your Openrouter API key in the `OPENROUTER_API_KEY`.
 
 To get your server ID, start by activating developer mode on your account by [following this guide](https://www.howtogeek.com/714348/how-to-enable-or-disable-developer-mode-on-discord/)
 After that, go to your server, right-click on the top banner with your server name, and click "Copy Server ID" with the `ID` icon.
@@ -69,7 +70,7 @@ To run this project, you will need to add the following environment variables to
 
 `TOKEN` > Your discord bot token available in the [Discord Developer Portal](https://discord.com/developers/applications/)
 
-`GROQ_API_KEY` > Your Groq API Key to enable Auto-Moderation
+`OPENROUTER_API_KEY` > Your Openrouter API Key to enable Auto-Moderation
 
 `NODE_ENV` > Don't touch that
 
